@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { CONFIG as BAKED_CONFIG, ENTRIES as BAKED_ENTRIES } from "./data.js";
 
 const PROMPTS = [
   `When I met you it was like`,
@@ -224,7 +225,7 @@ function SetupMode({ entries, setEntries, config, setConfig, onStartReveal }) {
                 <div style={styles.entryInfo}>
                   <strong style={styles.entryName}>{e.name}</strong>
                   <span style={styles.entryBook}>"{e.bookTitle}"{e.bookAuthor ? ` by ${e.bookAuthor}` : ""}</span>
-                  <span style={styles.entryPrompt}>Prompt #{e.promptIdx + 1}</span>
+                  <span style={styles.entryPrompt}>"{PROMPTS[e.promptIdx]}..."</span>
                   {e.videoUrl && <span style={styles.entryVideoTag}>Video attached</span>}
                 </div>
                 <div style={styles.entryActions} className="entry-actions">
@@ -275,7 +276,7 @@ function RevealLanding({ name, count, onBegin }) {
 }
 
 // ─── REVEAL: BOOKSHELF ───
-function Bookshelf({ entries, revealed, onSelect, onBack }) {
+function Bookshelf({ entries, revealed, onSelect, onBack, showBack = true }) {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { setTimeout(() => setLoaded(true), 100); }, []);
   return (
@@ -283,7 +284,7 @@ function Bookshelf({ entries, revealed, onSelect, onBack }) {
       <style>{FONTS_CSS}</style>
       <FullscreenBtn />
       <div style={styles.shelfHeader}>
-        <button style={styles.backLink} onClick={onBack}>← Back to setup</button>
+        {showBack && <button style={styles.backLink} onClick={onBack}>← Back to setup</button>}
         <h2 style={styles.shelfTitle}>Choose a Book</h2>
         <p style={styles.shelfSub}>{Object.keys(revealed).length} of {entries.length} revealed</p>
       </div>
@@ -493,29 +494,37 @@ function TheReveal({ entry, index, onDone }) {
 
 // ─── MAIN APP ───
 export default function App() {
+  const hasBakedData = BAKED_ENTRIES && BAKED_ENTRIES.length > 0;
   const [entries, setEntries] = useState([]);
   const [config, setConfig] = useState({ wifeName: "" });
   const [mode, setMode] = useState("loading");
   const [revealed, setRevealed] = useState({});
   const [selected, setSelected] = useState(null);
-  const [revealPhase, setRevealPhase] = useState("shelf"); // shelf | opened | revealed
+  const [revealPhase, setRevealPhase] = useState("shelf");
   const [storageReady, setStorageReady] = useState(false);
 
-  // Load from storage
+  // Load data — baked-in data takes priority, otherwise localStorage
   useEffect(() => {
-    try {
-      const savedEntries = localStorage.getItem("bday-entries");
-      const savedConfig = localStorage.getItem("bday-config");
-      if (savedEntries) setEntries(JSON.parse(savedEntries));
-      if (savedConfig) setConfig(JSON.parse(savedConfig));
-    } catch (e) { console.log("Storage load:", e); }
+    if (hasBakedData) {
+      setEntries(BAKED_ENTRIES.map((e, i) => ({ ...e, id: i + 1 })));
+      setConfig(BAKED_CONFIG);
+      setMode("reveal");
+      setRevealPhase("landing");
+    } else {
+      try {
+        const savedEntries = localStorage.getItem("bday-entries");
+        const savedConfig = localStorage.getItem("bday-config");
+        if (savedEntries) setEntries(JSON.parse(savedEntries));
+        if (savedConfig) setConfig(JSON.parse(savedConfig));
+      } catch (e) { console.log("Storage load:", e); }
+      setMode("setup");
+    }
     setStorageReady(true);
-    setMode("setup");
   }, []);
 
-  // Save to storage
+  // Save to storage (only when not using baked data)
   useEffect(() => {
-    if (!storageReady) return;
+    if (!storageReady || hasBakedData) return;
     try {
       localStorage.setItem("bday-entries", JSON.stringify(entries));
       localStorage.setItem("bday-config", JSON.stringify(config));
@@ -555,6 +564,7 @@ export default function App() {
         revealed={revealed}
         onSelect={(i) => { setSelected(i); setRevealPhase("opened"); }}
         onBack={() => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); setMode("setup"); }}
+        showBack={!hasBakedData}
       />
     );
   }
